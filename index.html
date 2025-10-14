@@ -4,7 +4,20 @@
   <meta charset="utf-8" />
   <title>OneNationOneCard — Web NFC Prototype</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <link rel="stylesheet" href="/styles.css?v=20251014">
+  <link id="siteStyles" rel="stylesheet" href="/styles.css?v=20251014">
+  <script>
+    // Adjust stylesheet for local file preview while keeping Vercel-friendly absolute path in deploy
+    (function(){
+      try {
+        if (location.protocol === 'file:') {
+          var link = document.getElementById('siteStyles');
+          if (link && link.href.indexOf('/styles.css') !== -1) {
+            link.href = 'styles.css?v=20251014';
+          }
+        }
+      } catch(e) {}
+    })();
+  </script>
 </head>
 <body>
   <h2>OneNationOneCard — Web NFC Prototype</h2>
