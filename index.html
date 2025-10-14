@@ -11,7 +11,8 @@
     input, button, textarea { width:100%; padding:8px; margin-top:6px; box-sizing:border-box }
     .row { display:flex; gap:8px }
     .small { width: 140px }
-    pre { background:#f7f7f7; padding:8px; border-radius:6px; overflow:auto }
+    pre { background:#f7f7f7; padding:8px; border-radius:6px; overflow:auto; max-height:240px; }
+    .hint { color:#666; font-size:0.9rem; }
   </style>
 </head>
 <body>
@@ -20,7 +21,7 @@
   <div id="supportNotice" class="card"></div>
 
   <div class="card">
-    <h3>1) Request credential from issuer (server)</h3>
+    <h3> Request credential from issuer (server)</h3>
     <label>Name <input id="name" value="Prateek A"></label>
     <label>DOB <input id="dob" value="1998-05-01"></label>
     <label>Photo hash <input id="phash" value="sha256:abcdef1234567890"></label>
@@ -30,17 +31,19 @@
       <button id="requestBtn">Request Issuance (server)</button>
       <button id="writeBtn">Write to tag (after issuing)</button>
     </div>
+    <p class="hint">Click <strong>Request Issuance</strong> to get the blob from the server, then tap <strong>Write to tag</strong> and touch the card to your phone.</p>
     <p><strong>Response (server):</strong></p>
     <pre id="serverResp">--</pre>
   </div>
 
   <div class="card">
-    <h3>2) Read & Verify from NFC tag</h3>
+    <h3>Read & Verify from NFC tag</h3>
     <button id="readBtn">Read tag</button>
     <label>Enter PIN to decrypt <input id="verifyPin" type="password"></label>
     <div class="row">
       <button id="decryptVerifyBtn">Decrypt & Verify</button>
     </div>
+    <p class="hint">Press Read tag, then touch the tag to the phone. After the raw blob appears, enter PIN and click Decrypt & Verify.</p>
     <p><strong>Tag raw:</strong></p>
     <pre id="tagRaw">--</pre>
     <p><strong>Decrypted credential (if successful):</strong></p>
@@ -48,18 +51,22 @@
   </div>
 
 <script>
-(async ()=>{
-
+(async () => {
   const supportNotice = document.getElementById("supportNotice");
   const serverResp = document.getElementById("serverResp");
   const tagRaw = document.getElementById("tagRaw");
   const credOut = document.getElementById("credOut");
 
-  // detect Web NFC
-  const nfcSupported = 'NDEFReader' in window && 'NDEFWriter' in window;
+  // detect Web NFC properly: check for NDEFReader and secure context
+  const hasNdefReader = 'NDEFReader' in window;
+  const isSecure = window.isSecureContext === true;
+  const nfcSupported = hasNdefReader && isSecure;
   if(!nfcSupported){
-    supportNotice.innerHTML = `<strong>Web NFC not available.</strong>
-      Web NFC currently works on Chromium-based browsers on Android (Chrome/Edge). Ensure you're on Android and using HTTPS or localhost.`;
+    let reason = [];
+    if(!hasNdefReader) reason.push("NDEFReader API missing");
+    if(!isSecure) reason.push("not a secure context (HTTPS/localhost required)");
+    const why = reason.length ? ` (${reason.join(', ')})` : '';
+    supportNotice.innerHTML = `<strong>Web NFC not available${why}.</strong>`;
   } else {
     supportNotice.innerHTML = `<strong>Web NFC detected.</strong> You can read & write tags.`;
   }
@@ -104,16 +111,16 @@
     if(!nfcSupported) return alert("Web NFC unsupported");
     if(!lastBlob) return alert("No blob available. Click 'Request Issuance' first.");
     try {
-      const writer = new NDEFWriter();
-      await writer.write({
+      const ndef = new NDEFReader();
+      await ndef.write({
         records: [
           { recordType: "mime", mediaType: "application/vnd.onenation.cred", data: JSON.stringify(lastBlob) }
         ]
       });
-      alert("Write successful (tag touched).");
+      alert("Write successful.");
     } catch (e) {
       console.error(e);
-      alert("Write failed: " + e);
+      alert("Write failed: " + (e.message || e));
     }
   });
 
@@ -123,31 +130,31 @@
     try {
       const ndef = new NDEFReader();
       await ndef.scan();
+      tagRaw.textContent = "(waiting for a tag — touch the tag to the phone)";
       ndef.onreadingerror = () => { alert("Read error"); };
       ndef.onreading = event => {
         const records = event.message.records;
         if(records.length === 0) { tagRaw.textContent = "(no records)"; return; }
-        // take the first record payload text
-        const rec = records[0];
-        // We expect MIME/text JSON payload
-        let textPromise;
-        if(rec.recordType === "mime" || rec.recordType === "unknown") {
-          // decode bytes -> UTF8
-          const data = rec.data;
-          const arr = new Uint8Array(data);
-          const s = new TextDecoder().decode(arr);
-          lastTagText = s;
-          tagRaw.textContent = s;
-        } else if (rec.recordType === "text") {
-          const s = rec.data ? new TextDecoder().decode(new Uint8Array(rec.data)) : "";
-          lastTagText = s;
-          tagRaw.textContent = s;
-        } else {
-          tagRaw.textContent = "(unsupported recordType: "+rec.recordType+")";
+        let out = [];
+        for (const rec of records) {
+          try {
+            let text = "";
+            if(rec.data){
+              const dv = rec.data; // DataView
+              const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
+              text = new TextDecoder().decode(bytes);
+            }
+            out.push({t: rec.recordType, m: rec.mediaType || null, d: text});
+          } catch(e) {
+            out.push({t: rec.recordType, err: String(e)});
+          }
         }
+        const first = out[0];
+        lastTagText = first.d || "";
+        tagRaw.textContent = JSON.stringify(out, null, 2);
       };
-      alert("Scanning... now tap a tag to read (and wait for onreading event).");
-    } catch(e){ console.error(e); alert("Scan failed: " + e); }
+      alert("Scanning active — touch the tag to your phone now.");
+    } catch(e){ console.error(e); alert("Scan failed: " + (e.message || e)); }
   });
 
   /* --- Decrypt & Verify --- */
@@ -161,28 +168,21 @@
       blob = JSON.parse(lastTagText);
     } catch(e){ alert("Tag JSON parse error: " + e); return; }
 
-    // required fields: salt, nonce, ct, sig
     try {
       const salt = base64ToArray(blob.salt);
       const nonce = base64ToArray(blob.nonce);
       const ct = base64ToArray(blob.ct);
       const sigDer = base64ToArray(blob.sig);
-      // derive key via PBKDF2
       const keyBytes = await derivePBKDF2Key(pin, salt, 200000, 256);
-      // decrypt AES-GCM
       const plain = await aesGcmDecrypt(keyBytes, nonce, ct);
       const plainText = new TextDecoder().decode(plain);
-      // verify signature (DER -> raw) using issuer pub key provided by server earlier
-      // If not cached, ask server for issuer pub or you can embed issuer pub in tag (we returned it earlier to frontend on issue)
+
       let issuerPem = lastIssuerPubPem;
       if(!issuerPem){
-        // ask user to paste issuer public key or fetch from server -- convenient: fetch public key
-        const resp = await fetch("/issue_credential", {method:"OPTIONS"});
-        // OPTIONS isn't implemented; fallback: request user to paste public key
         issuerPem = prompt("Issuer public key missing. Paste issuer public key PEM here (from server response):");
         if(!issuerPem){ alert("Issuer public key required for verification."); return; }
       }
-      const rawSig = derToRaw(sigDer, 32); // r||s padded to 32 bytes each
+      const rawSig = derToRaw(sigDer, 32);
       const ok = await verifyEcdsaSignature(issuerPem, plain, rawSig);
       if(!ok) {
         credOut.textContent = "Signature INVALID";
@@ -191,12 +191,11 @@
       }
     } catch (e) {
       console.error(e);
-      alert("Decrypt/verify failed: " + e);
+      alert("Decrypt/verify failed: " + (e.message || e));
     }
   });
 
   /* ---------- Crypto helpers ---------- */
-
   function base64ToArray(s){
     const bin = atob(s);
     const arr = new Uint8Array(bin.length);
@@ -205,7 +204,6 @@
   }
 
   async function derivePBKDF2Key(pin, salt, iterations, bits){
-    // returns raw key bytes
     const enc = new TextEncoder();
     const baseKey = await window.crypto.subtle.importKey("raw", enc.encode(pin), {name:"PBKDF2"}, false, ["deriveBits","deriveKey"]);
     const derived = await window.crypto.subtle.deriveKey(
@@ -226,16 +224,13 @@
   }
 
   async function verifyEcdsaSignature(pem, messageBytes, rawSig){
-    // import PEM (SPKI) as ECDSA P-256 public key and verify raw r||s signature
     const pub = pemToArrayBuffer(pem);
     const key = await window.crypto.subtle.importKey("spki", pub, {name:"ECDSA", namedCurve:"P-256"}, false, ["verify"]);
-    // verify expects signature in "raw" (r|s) or DER? In WebCrypto, EC verify uses "raw" for most browsers.
     const ok = await window.crypto.subtle.verify({name:"ECDSA", hash:"SHA-256"}, key, rawSig, messageBytes);
     return ok;
   }
 
   function pemToArrayBuffer(pem){
-    // strip header/footer
     const b64 = pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, "");
     const bin = atob(b64);
     const arr = new Uint8Array(bin.length);
@@ -243,13 +238,11 @@
     return arr.buffer;
   }
 
-  // DER (ASN.1) ECDSA signature -> raw r||s padded (each 32 bytes for P-256)
   function derToRaw(derBytes, partLen){
-    // Basic ASN.1 DER parser for ECDSA sig: 0x30 | len | 0x02 | rlen | r | 0x02 | slen | s
     const b = derBytes;
     if(b[0] !== 0x30) throw "Bad DER (not sequence)";
     let idx = 2;
-    if(b[1] & 0x80){ // long length
+    if(b[1] & 0x80){
       const lenBytes = b[1] & 0x7f; idx = 2 + lenBytes;
     }
     if(b[idx] !== 0x02) throw "Bad DER (no int r)";
@@ -269,6 +262,7 @@
     raw.set(sPadded, partLen);
     return raw.buffer;
   }
+
   function leftPad(arr, len){
     if(arr.length === len) return arr;
     if(arr.length > len) return arr.slice(arr.length - len);
@@ -276,7 +270,6 @@
     out.set(arr, len - arr.length);
     return out;
   }
-
 })();
 </script>
 </body>
