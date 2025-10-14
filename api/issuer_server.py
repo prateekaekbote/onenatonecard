@@ -29,7 +29,7 @@ if MONGO_URI:
                 "voter_id": "ABC1234567",
                 "pan": "ABCDE1234F",
                 "dl": "KA0120200012345",
-                "photo_hash": "sha256:abcdef1234567890" # Keeping this for the original flow
+                "photo_hash": "sha256:abcdef1234567890"
             })
             print("Dummy user created.")
     except Exception as e:
@@ -62,10 +62,15 @@ def fetch_user():
     try:
         user_doc = db.users.find_one({'_id': aadhaar})
         if user_doc:
+            # Ensure the '_id' field is a string to avoid JSON errors
+            user_doc['_id'] = str(user_doc['_id'])
             return jsonify(user_doc), 200
         else:
+            # FIX: The status code was 44, it is now correctly 404
             return jsonify({"error": "User not found"}), 404
     except Exception as e:
+        # Added robust error handling to prevent crashes
+        print(f"ERROR in fetch_user: {e}")
         return jsonify({"error": str(e)}), 500
 
 def sign_message(priv_key, message_bytes):
@@ -78,15 +83,13 @@ def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
 @app.route("/api/issue_credential", methods=["POST"])
 def issue_credential():
     req = request.json or {}
-    # Get all the new fields from the request
     pin = req.get("pin")
     expiry = req.get("expiry")
     
-    # The credential data is now the entire request body minus the PIN and expiry
     cred = req.copy()
     cred.pop("pin", None)
     cred.pop("expiry", None)
-    cred["i"] = ISSUER_ID # Add the issuer ID
+    cred["i"] = ISSUER_ID
 
     if not all(k in cred for k in ["name", "dob", "sex", "voter_id", "pan", "dl"]) or not pin:
         return jsonify({"error":"missing fields"}), 400
