@@ -1,12 +1,12 @@
 # issuer_server.py
-from flask import Flask, request, jsonify, render_template
+from flask import Flask, request, jsonify
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os, base64, json
 
-app = Flask(__name__, template_folder="templates")
+app = Flask(__name__)
 
 ISSUER_ID = "ISSUER01"
 PRIVATE_KEY_FILE = "issuer_priv.pem"
@@ -45,10 +45,6 @@ def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
         iterations=iterations,
     )
     return kdf.derive(pin.encode("utf-8"))
-
-@app.route("/")
-def index():
-    return render_template("index.html")
 
 @app.route("/issue_credential", methods=["POST"])
 def issue_credential():
@@ -91,7 +87,3 @@ def issue_credential():
     }
 
     return jsonify({"tag_blob": blob, "issuer_pub_pem": issuer_pub_pem.decode("utf-8")})
-
-if __name__ == "__main__":
-    # for local testing only. in prod, run behind HTTPS.
-    app.run(host="0.0.0.0", port=5000, debug=True)
