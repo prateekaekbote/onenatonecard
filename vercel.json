@@ -8,11 +8,19 @@
     {
       "src": "index.html",
       "use": "@vercel/static"
+    },
+    {
+      "src": "styles.css",
+      "use": "@vercel/static"
     }
   ],
   "routes": [
     {
       "handle": "filesystem"
+    },
+    {
+      "src": "/styles.css",
+      "dest": "styles.css"
     },
     {
       "src": "/api/(.*)",
