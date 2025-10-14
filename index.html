@@ -13,6 +13,7 @@
     .small { width: 140px }
     pre { background:#f7f7f7; padding:8px; border-radius:6px; overflow:auto; max-height:240px; }
     .hint { color:#666; font-size:0.9rem; }
+    .disabled-section { opacity:0.5; pointer-events:none; }
   </style>
 </head>
 <body>
@@ -21,10 +22,21 @@
   <div id="supportNotice" class="card"></div>
 
   <div class="card">
-    <h3> Request credential from issuer (server)</h3>
-    <label>Name <input id="name" value="Prateek A"></label>
-    <label>DOB <input id="dob" value="1998-05-01"></label>
-    <label>Photo hash <input id="phash" value="sha256:abcdef1234567890"></label>
+    <h3>1. Fetch details from Database</h3>
+    <label>Enter Aadhaar No. <input id="aadhaar" placeholder="123456789012" value="123456789012"></label>
+    <button id="fetchBtn">Fetch Data</button>
+  </div>
+  
+  <div id="issuanceSection" class="card disabled-section">
+    <h3>2. Request credential from issuer (server)</h3>
+    <label>Name <input id="name" readonly></label>
+    <label>Sex <input id="sex" readonly></label>
+    <label>DOB <input id="dob" readonly></label>
+    <label>Voter ID <input id="voter_id" readonly></label>
+    <label>PAN <input id="pan" readonly></label>
+    <label>Driving License (DL) <input id="dl" readonly></label>
+    <label>Photo hash <input id="phash" readonly></label>
+    <hr>
     <label>PIN (for tag encryption) <input id="pin" value="7359" type="password"></label>
     <label>Expiry (optional) <input id="expiry" placeholder="2026-10-10"></label>
     <div class="row">
@@ -37,7 +49,7 @@
   </div>
 
   <div class="card">
-    <h3>Read & Verify from NFC tag</h3>
+    <h3>3. Read & Verify from NFC tag</h3>
     <button id="readBtn">Read tag</button>
     <label>Enter PIN to decrypt <input id="verifyPin" type="password"></label>
     <div class="row">
@@ -57,7 +69,20 @@
   const tagRaw = document.getElementById("tagRaw");
   const credOut = document.getElementById("credOut");
 
-  // detect Web NFC properly: check for NDEFReader and secure context
+  // Get all input elements
+  const elements = {
+      name: document.getElementById("name"),
+      sex: document.getElementById("sex"),
+      dob: document.getElementById("dob"),
+      voter_id: document.getElementById("voter_id"),
+      pan: document.getElementById("pan"),
+      dl: document.getElementById("dl"),
+      phash: document.getElementById("phash"),
+      pin: document.getElementById("pin"),
+      expiry: document.getElementById("expiry"),
+      issuanceSection: document.getElementById("issuanceSection")
+  };
+
   const hasNdefReader = 'NDEFReader' in window;
   const isSecure = window.isSecureContext === true;
   const nfcSupported = hasNdefReader && isSecure;
@@ -71,19 +96,55 @@
     supportNotice.innerHTML = `<strong>Web NFC detected.</strong> You can read & write tags.`;
   }
 
-  // store last server response
   let lastBlob = null;
   let lastIssuerPubPem = null;
   let lastTagText = null;
 
-  /* --- Helper: call server to issue credential --- */
+  /* --- Fetch user data from server --- */
+  document.getElementById("fetchBtn").addEventListener("click", async () => {
+    const aadhaar = document.getElementById("aadhaar").value;
+    if(!aadhaar) return alert("Please enter an Aadhaar number.");
+
+    try {
+        const res = await fetch("/api/fetch_user", {
+            method: "POST",
+            headers: {"Content-Type":"application/json"},
+            body: JSON.stringify({ aadhaar: aadhaar })
+        });
+        const j = await res.json();
+        if(res.ok){
+            elements.name.value = j.name;
+            elements.sex.value = j.sex;
+            elements.dob.value = j.dob;
+            elements.voter_id.value = j.voter_id;
+            elements.pan.value = j.pan;
+            elements.dl.value = j.dl;
+            elements.phash.value = j.photo_hash;
+            elements.issuanceSection.classList.remove("disabled-section");
+            alert("Data fetched successfully. You can now request issuance.");
+        } else {
+            alert("Error: " + (j.error || "Unknown error"));
+        }
+    } catch(e) {
+        console.error(e);
+        alert("Request to fetch user failed: " + e);
+    }
+  });
+
+
+  /* --- Call server to issue credential --- */
   document.getElementById("requestBtn").addEventListener("click", async () => {
+    // Construct payload with all the new fields
     const payload = {
-      name: document.getElementById("name").value,
-      dob: document.getElementById("dob").value,
-      photo_hash: document.getElementById("phash").value,
-      pin: document.getElementById("pin").value,
-      expiry: document.getElementById("expiry").value || undefined
+      name: elements.name.value,
+      sex: elements.sex.value,
+      dob: elements.dob.value,
+      voter_id: elements.voter_id.value,
+      pan: elements.pan.value,
+      dl: elements.dl.value,
+      photo_hash: elements.phash.value,
+      pin: elements.pin.value,
+      expiry: elements.expiry.value || undefined
     };
     try {
       const res = await fetch("/api/issue_credential", {
@@ -112,12 +173,8 @@
     if(!lastBlob) return alert("No blob available. Click 'Request Issuance' first.");
     try {
       const ndef = new NDEFReader();
-      // --- START OF FIX ---
-      // The NDEFReader API requires data to be an ArrayBuffer or a view (like Uint8Array).
-      // We must encode our JSON string into a Uint8Array.
       const encoder = new TextEncoder();
       const dataToWrite = encoder.encode(JSON.stringify(lastBlob));
-      // --- END OF FIX ---
       await ndef.write({
         records: [
           { recordType: "mime", mediaType: "application/vnd.onenation.cred", data: dataToWrite }
@@ -146,7 +203,7 @@
           try {
             let text = "";
             if(rec.data){
-              const dv = rec.data; // DataView
+              const dv = rec.data;
               const bytes = new Uint8Array(dv.buffer, dv.byteOffset, dv.byteLength);
               text = new TextDecoder().decode(bytes);
             }
@@ -168,12 +225,10 @@
     if(!lastTagText) return alert("No tag content available. Read a tag first.");
     const pin = document.getElementById("verifyPin").value;
     if(!pin) return alert("Enter PIN used at issuance.");
-
     let blob;
     try {
       blob = JSON.parse(lastTagText);
     } catch(e){ alert("Tag JSON parse error: " + e); return; }
-
     try {
       const salt = base64ToArray(blob.salt);
       const nonce = base64ToArray(blob.nonce);
@@ -182,7 +237,6 @@
       const keyBytes = await derivePBKDF2Key(pin, salt, 200000, 256);
       const plain = await aesGcmDecrypt(keyBytes, nonce, ct);
       const plainText = new TextDecoder().decode(plain);
-
       let issuerPem = lastIssuerPubPem;
       if(!issuerPem){
         issuerPem = prompt("Issuer public key missing. Paste issuer public key PEM here (from server response):");
@@ -208,34 +262,26 @@
     for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
     return arr;
   }
-
   async function derivePBKDF2Key(pin, salt, iterations, bits){
     const enc = new TextEncoder();
     const baseKey = await window.crypto.subtle.importKey("raw", enc.encode(pin), {name:"PBKDF2"}, false, ["deriveBits","deriveKey"]);
     const derived = await window.crypto.subtle.deriveKey(
       { name: "PBKDF2", salt: salt, iterations: iterations, hash: "SHA-256" },
-      baseKey,
-      { name: "AES-GCM", length: bits },
-      true,
-      ["encrypt","decrypt"]
+      baseKey, { name: "AES-GCM", length: bits }, true, ["encrypt","decrypt"]
     );
     const raw = await window.crypto.subtle.exportKey("raw", derived);
     return new Uint8Array(raw);
   }
-
   async function aesGcmDecrypt(keyBytes, nonce, ct){
     const cryptoKey = await window.crypto.subtle.importKey("raw", keyBytes, "AES-GCM", false, ["decrypt"]);
     const plain = await window.crypto.subtle.decrypt({name:"AES-GCM", iv: nonce}, cryptoKey, ct);
     return new Uint8Array(plain);
   }
-
   async function verifyEcdsaSignature(pem, messageBytes, rawSig){
     const pub = pemToArrayBuffer(pem);
     const key = await window.crypto.subtle.importKey("spki", pub, {name:"ECDSA", namedCurve:"P-256"}, false, ["verify"]);
-    const ok = await window.crypto.subtle.verify({name:"ECDSA", hash:"SHA-256"}, key, rawSig, messageBytes);
-    return ok;
+    return await window.crypto.subtle.verify({name:"ECDSA", hash:"SHA-256"}, key, rawSig, messageBytes);
   }
-
   function pemToArrayBuffer(pem){
     const b64 = pem.replace(/-----(BEGIN|END) PUBLIC KEY-----/g, "").replace(/\s+/g, "");
     const bin = atob(b64);
@@ -243,14 +289,11 @@
     for(let i=0;i<bin.length;i++) arr[i] = bin.charCodeAt(i);
     return arr.buffer;
   }
-
-  function derToRaw(derBytes, partlen){
+  function derToRaw(derBytes, partLen){
     const b = derBytes;
     if(b[0] !== 0x30) throw "Bad DER (not sequence)";
     let idx = 2;
-    if(b[1] & 0x80){
-      const lenBytes = b[1] & 0x7f; idx = 2 + lenBytes;
-    }
+    if(b[1] & 0x80){ const lenBytes = b[1] & 0x7f; idx = 2 + lenBytes; }
     if(b[idx] !== 0x02) throw "Bad DER (no int r)";
     const rLen = b[idx+1];
     const rStart = idx+2;
@@ -260,15 +303,13 @@
     const sLen = b[idx2+1];
     const sStart = idx2+2;
     const s = b.slice(sStart, sStart + sLen);
-
-    const rPadded = leftPad(r, partlen);
-    const sPadded = leftPad(s, partlen);
-    const raw = new Uint8Array(partlen*2);
+    const rPadded = leftPad(r, partLen);
+    const sPadded = leftPad(s, partLen);
+    const raw = new Uint8Array(partLen*2);
     raw.set(rPadded, 0);
-    raw.set(sPadded, partlen);
+    raw.set(sPadded, partLen);
     return raw.buffer;
   }
-
   function leftPad(arr, len){
     if(arr.length === len) return arr;
     if(arr.length > len) return arr.slice(arr.length - len);

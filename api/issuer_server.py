@@ -18,14 +18,18 @@ if MONGO_URI:
     try:
         client = MongoClient(MONGO_URI)
         db = client.OneNationOneCard # Database name
-        # Check if the dummy user exists, if not, create it.
+        # Check if the dummy user exists, if not, create it with all new fields.
         if db.users.count_documents({'_id': '123456789012'}) == 0:
             print("Dummy user not found, creating one...")
             db.users.insert_one({
-                "_id": "123456789012",
+                "_id": "123456789012", # This is the Aadhaar number (Primary Key)
                 "name": "Prateek A (Dummy)",
+                "sex": "Male",
                 "dob": "1998-05-01",
-                "photo_hash": "sha256:abcdef1234567890"
+                "voter_id": "ABC1234567",
+                "pan": "ABCDE1234F",
+                "dl": "KA0120200012345",
+                "photo_hash": "sha256:abcdef1234567890" # Keeping this for the original flow
             })
             print("Dummy user created.")
     except Exception as e:
@@ -74,18 +78,22 @@ def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
 @app.route("/api/issue_credential", methods=["POST"])
 def issue_credential():
     req = request.json or {}
-    name = req.get("name")
-    dob = req.get("dob")
-    phash = req.get("photo_hash")
+    # Get all the new fields from the request
     pin = req.get("pin")
     expiry = req.get("expiry")
+    
+    # The credential data is now the entire request body minus the PIN and expiry
+    cred = req.copy()
+    cred.pop("pin", None)
+    cred.pop("expiry", None)
+    cred["i"] = ISSUER_ID # Add the issuer ID
 
-    if not (name and dob and phash and pin):
+    if not all(k in cred for k in ["name", "dob", "sex", "voter_id", "pan", "dl"]) or not pin:
         return jsonify({"error":"missing fields"}), 400
 
-    cred = {"i": ISSUER_ID, "n": name, "dob": dob, "phash": phash}
     if expiry:
         cred["exp"] = expiry
+        
     cred_bytes = json.dumps(cred, separators=(",", ":"), sort_keys=True).encode("utf-8")
     sig = sign_message(issuer_priv, cred_bytes)
     sig_b64 = base64.b64encode(sig).decode("utf-8")
