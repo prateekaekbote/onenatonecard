@@ -6,36 +6,39 @@ from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os, base64, json
 from pymongo import MongoClient
+from pymongo.errors import ConnectionFailure
 
 app = Flask(__name__)
 
 # --- MongoDB Initialization ---
 MONGO_URI = os.getenv("MONGO_DB_URI")
-client = None
 db = None
 
-if MONGO_URI:
+if not MONGO_URI:
+    print("FATAL_ERROR: MONGO_DB_URI environment variable not found.")
+else:
     try:
-        client = MongoClient(MONGO_URI)
-        db = client.OneNationOneCard # Database name
+        print("Attempting to connect to MongoDB...")
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+        client.admin.command('ismaster')
+        print("MongoDB connection successful.")
+        db = client.OneNationOneCard
+
         if db.users.count_documents({'_id': '123456789012'}) == 0:
             print("Dummy user not found, creating one...")
             db.users.insert_one({
                 "_id": "123456789012",
-                "name": "Prateek A (Dummy)",
-                "sex": "Male",
-                "dob": "1998-05-01",
-                "voter_id": "ABC1234567",
-                "pan": "ABCDE1234F",
-                "dl": "KA0120200012345",
+                "name": "Prateek A (Dummy)", "sex": "Male", "dob": "1998-05-01",
+                "voter_id": "ABC1234567", "pan": "ABCDE1234F", "dl": "KA0120200012345",
                 "photo_hash": "sha256:abcdef1234567890"
             })
             print("Dummy user created.")
-    except Exception as e:
-        print(f"ERROR: Could not connect to MongoDB. {e}")
+    except ConnectionFailure as e:
+        print(f"FATAL_ERROR: MongoDB connection failed. Could not connect to server: {e}")
         db = None
-else:
-    print("WARNING: MONGO_DB_URI not found. Database features will be disabled.")
+    except Exception as e:
+        print(f"FATAL_ERROR: An unexpected error occurred during DB initialization: {e}")
+        db = None
 # -----------------------------
 
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -43,15 +46,24 @@ PRIVATE_KEY_FILE = os.path.join(basedir, '..', 'issuer_priv.pem')
 PUBLIC_KEY_FILE = os.path.join(basedir, '..', 'issuer_pub.pem')
 ISSUER_ID = "ISSUER01"
 
-with open(PRIVATE_KEY_FILE, "rb") as f:
-    issuer_priv = serialization.load_pem_private_key(f.read(), password=None)
-with open(PUBLIC_KEY_FILE, "rb") as f:
-    issuer_pub_pem = f.read()
+try:
+    with open(PRIVATE_KEY_FILE, "rb") as f:
+        issuer_priv = serialization.load_pem_private_key(f.read(), password=None)
+    with open(PUBLIC_KEY_FILE, "rb") as f:
+        issuer_pub_pem = f.read()
+except FileNotFoundError as e:
+    print(f"FATAL_ERROR: Could not find key files: {e}")
+    issuer_priv = None
+    issuer_pub_pem = None
+
 
 @app.route("/api/fetch_user", methods=["POST"])
 def fetch_user():
-    if not db:
-        return jsonify({"error": "Database not configured on server"}), 500
+    # --- THIS IS THE FIX ---
+    # The error log told us to use 'is None' instead of 'if not db'.
+    if db is None:
+    # -----------------------
+        return jsonify({"error": "Database connection failed on the server. Check logs."}), 500
     
     req = request.json or {}
     aadhaar = req.get("aadhaar")
@@ -61,27 +73,20 @@ def fetch_user():
     try:
         user_doc = db.users.find_one({'_id': aadhaar})
         if user_doc:
-            # --- START OF FIX ---
-            # Create a clean, JSON-safe dictionary from the MongoDB document.
-            # This prevents errors from special MongoDB data types like ObjectId.
             response_data = {
-                "name": user_doc.get("name"),
-                "sex": user_doc.get("sex"),
-                "dob": user_doc.get("dob"),
-                "voter_id": user_doc.get("voter_id"),
-                "pan": user_doc.get("pan"),
-                "dl": user_doc.get("dl"),
+                "name": user_doc.get("name"), "sex": user_doc.get("sex"), "dob": user_doc.get("dob"),
+                "voter_id": user_doc.get("voter_id"), "pan": user_doc.get("pan"), "dl": user_doc.get("dl"),
                 "photo_hash": user_doc.get("photo_hash")
             }
             return jsonify(response_data), 200
-            # --- END OF FIX ---
         else:
             return jsonify({"error": "User not found"}), 404
     except Exception as e:
         print(f"ERROR in fetch_user: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "An error occurred while fetching user data."}), 500
 
 def sign_message(priv_key, message_bytes):
+    if not priv_key: return None
     return priv_key.sign(message_bytes, ec.ECDSA(hashes.SHA256()))
 
 def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
@@ -90,6 +95,9 @@ def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
 
 @app.route("/api/issue_credential", methods=["POST"])
 def issue_credential():
+    if issuer_priv is None or issuer_pub_pem is None:
+        return jsonify({"error": "Server is missing key files. Check logs."}), 500
+
     req = request.json or {}
     pin = req.get("pin")
     expiry = req.get("expiry")
@@ -115,8 +123,7 @@ def issue_credential():
     ct = aesgcm.encrypt(nonce, cred_bytes, associated_data=None)
 
     blob = {
-        "v": "1",
-        "i": ISSUER_ID,
+        "v": "1", "i": ISSUER_ID,
         "salt": base64.b64encode(salt).decode("utf-8"),
         "nonce": base64.b64encode(nonce).decode("utf-8"),
         "ct": base64.b64encode(ct).decode("utf-8"),
