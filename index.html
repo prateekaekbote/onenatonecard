@@ -19,23 +19,31 @@
   
   <div id="issuanceSection" class="card disabled-section">
     <h3>2. Request credential from issuer (server)</h3>
-    <label>Name <input id="name" readonly></label>
-    <label>Sex <input id="sex" readonly></label>
-    <label>DOB <input id="dob" readonly></label>
-    <label>Voter ID <input id="voter_id" readonly></label>
-    <label>PAN <input id="pan" readonly></label>
-    <label>Driving License (DL) <input id="dl" readonly></label>
-    <label>Photo hash <input id="phash" readonly></label>
-    <hr>
-    <label>PIN (for tag encryption) <input id="pin" value="7359" type="password"></label>
-    <label>Expiry (optional) <input id="expiry" placeholder="2026-10-10"></label>
-    <div class="row">
-      <button id="requestBtn">Request Issuance (server)</button>
-      <button id="writeBtn">Write to tag (after issuing)</button>
+    <div class="split">
+      <div class="pane">
+        <h4>Your input <span class="pill info">you control this</span></h4>
+        <label>PIN (for tag encryption) <input id="pin" value="7359" type="password"></label>
+        <label>Expiry (optional) <input id="expiry" placeholder="2026-10-10"></label>
+        <div class="row">
+          <button id="requestBtn">Request Issuance (server)</button>
+          <button id="writeBtn">Write to tag (after issuing)</button>
+        </div>
+        <p class="hint">Request issuance first to receive an encrypted blob, then write it to a tag.</p>
+      </div>
+      <div class="pane">
+        <h4>Fetched from backend <span class="pill success">read‑only</span></h4>
+        <label>Name <input id="name" readonly></label>
+        <label>Sex <input id="sex" readonly></label>
+        <label>DOB <input id="dob" readonly></label>
+        <label>Voter ID <input id="voter_id" readonly></label>
+        <label>PAN <input id="pan" readonly></label>
+        <label>Driving License (DL) <input id="dl" readonly></label>
+        <label>Photo hash <input id="phash" readonly></label>
+        <p class="hint muted">Values above are populated from your database after Step 1.</p>
+        <p class="hint"><strong>Response (server):</strong></p>
+        <pre id="serverResp">--</pre>
+      </div>
     </div>
-    <p class="hint">Click <strong>Request Issuance</strong> to get the blob from the server, then tap <strong>Write to tag</strong> and touch the card to your phone.</p>
-    <p><strong>Response (server):</strong></p>
-    <pre id="serverResp">--</pre>
   </div>
 
   <div class="card">

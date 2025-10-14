@@ -18,3 +18,20 @@ h3 { font-size: 1.2rem; margin: 0 0 12px; color:#0f172a }
 hr { border: none; height:1px; background: linear-gradient(90deg, rgba(17,24,39,0), rgba(17,24,39,.15), rgba(17,24,39,0)); margin: 14px 0 }
 @media (max-width: 640px) { body { padding: 12px; max-width: 100% } .row { flex-direction: column } }
 
+/* Layout helpers for clearer separation of input vs backend output */
+.split { display: grid; grid-template-columns: 1fr 1fr; gap: 16px }
+.pane { border: 1px solid rgba(17,24,39,0.06); border-radius: 12px; padding: 12px; background: rgba(255,255,255,0.6) }
+.pane h4 { margin: 0 0 8px; font-size: 1rem; color:#0f172a }
+
+/* Badges / pills */
+.pill { display:inline-block; padding: 4px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing:.2px; }
+.pill.info { background: rgba(37,99,235,.12); color:#1e40af; }
+.pill.success { background: rgba(16,185,129,.14); color:#065f46; }
+
+/* Visual distinction for read-only backend fields */
+input[readonly] { background: #f9fafb }
+.muted { color:#6b7280 }
+
+@media (max-width: 860px) {
+  .split { grid-template-columns: 1fr; }
+}
