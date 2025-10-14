@@ -7,6 +7,15 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os, base64, json
 
 app = Flask(__name__)
+# --- START OF CHANGES ---
+# Get the absolute path of the directory containing this script
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Construct paths to the key files relative to the project root
+# The script is in /api, so we go one level up ('..')
+PRIVATE_KEY_FILE = os.path.join(basedir, '..', 'issuer_priv.pem')
+PUBLIC_KEY_FILE = os.path.join(basedir, '..', 'issuer_pub.pem')
+# --- END OF CHANGES ---
 
 ISSUER_ID = "ISSUER01"
 PRIVATE_KEY_FILE = "issuer_priv.pem"
