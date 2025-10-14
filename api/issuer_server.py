@@ -18,11 +18,10 @@ if MONGO_URI:
     try:
         client = MongoClient(MONGO_URI)
         db = client.OneNationOneCard # Database name
-        # Check if the dummy user exists, if not, create it with all new fields.
         if db.users.count_documents({'_id': '123456789012'}) == 0:
             print("Dummy user not found, creating one...")
             db.users.insert_one({
-                "_id": "123456789012", # This is the Aadhaar number (Primary Key)
+                "_id": "123456789012",
                 "name": "Prateek A (Dummy)",
                 "sex": "Male",
                 "dob": "1998-05-01",
@@ -62,14 +61,23 @@ def fetch_user():
     try:
         user_doc = db.users.find_one({'_id': aadhaar})
         if user_doc:
-            # Ensure the '_id' field is a string to avoid JSON errors
-            user_doc['_id'] = str(user_doc['_id'])
-            return jsonify(user_doc), 200
+            # --- START OF FIX ---
+            # Create a clean, JSON-safe dictionary from the MongoDB document.
+            # This prevents errors from special MongoDB data types like ObjectId.
+            response_data = {
+                "name": user_doc.get("name"),
+                "sex": user_doc.get("sex"),
+                "dob": user_doc.get("dob"),
+                "voter_id": user_doc.get("voter_id"),
+                "pan": user_doc.get("pan"),
+                "dl": user_doc.get("dl"),
+                "photo_hash": user_doc.get("photo_hash")
+            }
+            return jsonify(response_data), 200
+            # --- END OF FIX ---
         else:
-            # FIX: The status code was 44, it is now correctly 404
             return jsonify({"error": "User not found"}), 404
     except Exception as e:
-        # Added robust error handling to prevent crashes
         print(f"ERROR in fetch_user: {e}")
         return jsonify({"error": str(e)}), 500
 
