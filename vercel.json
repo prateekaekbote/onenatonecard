@@ -30,7 +30,7 @@
       "src": "/(.*)",
       "dest": "index.html"
     }
-  ],
+  ]
   // "headers": [
   //   {
   //     "source": "/styles.css",
