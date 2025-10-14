@@ -112,9 +112,15 @@
     if(!lastBlob) return alert("No blob available. Click 'Request Issuance' first.");
     try {
       const ndef = new NDEFReader();
+      // --- START OF FIX ---
+      // The NDEFReader API requires data to be an ArrayBuffer or a view (like Uint8Array).
+      // We must encode our JSON string into a Uint8Array.
+      const encoder = new TextEncoder();
+      const dataToWrite = encoder.encode(JSON.stringify(lastBlob));
+      // --- END OF FIX ---
       await ndef.write({
         records: [
-          { recordType: "mime", mediaType: "application/vnd.onenation.cred", data: JSON.stringify(lastBlob) }
+          { recordType: "mime", mediaType: "application/vnd.onenation.cred", data: dataToWrite }
         ]
       });
       alert("Write successful.");
@@ -238,7 +244,7 @@
     return arr.buffer;
   }
 
-  function derToRaw(derBytes, partLen){
+  function derToRaw(derBytes, partlen){
     const b = derBytes;
     if(b[0] !== 0x30) throw "Bad DER (not sequence)";
     let idx = 2;
@@ -255,11 +261,11 @@
     const sStart = idx2+2;
     const s = b.slice(sStart, sStart + sLen);
 
-    const rPadded = leftPad(r, partLen);
-    const sPadded = leftPad(s, partLen);
-    const raw = new Uint8Array(partLen*2);
+    const rPadded = leftPad(r, partlen);
+    const sPadded = leftPad(s, partlen);
+    const raw = new Uint8Array(partlen*2);
     raw.set(rPadded, 0);
-    raw.set(sPadded, partLen);
+    raw.set(sPadded, partlen);
     return raw.buffer;
   }
 
