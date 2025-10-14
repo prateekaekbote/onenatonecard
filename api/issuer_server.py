@@ -10,19 +10,16 @@ from pymongo.errors import ConnectionFailure
 
 app = Flask(__name__)
 
-# --- MongoDB Initialization with Enhanced Logging ---
+# --- MongoDB Initialization ---
 MONGO_URI = os.getenv("MONGO_DB_URI")
 db = None
 
-# --- START OF FIX ---
-# This new block provides detailed error messages if the DB connection fails.
 if not MONGO_URI:
     print("FATAL_ERROR: MONGO_DB_URI environment variable not found.")
 else:
     try:
         print("Attempting to connect to MongoDB...")
         client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        # The ismaster command is cheap and does not require auth.
         client.admin.command('ismaster')
         print("MongoDB connection successful.")
         db = client.OneNationOneCard
@@ -42,15 +39,13 @@ else:
     except Exception as e:
         print(f"FATAL_ERROR: An unexpected error occurred during DB initialization: {e}")
         db = None
-# --- END OF FIX ---
-# ----------------------------------------------------
+# -----------------------------
 
 basedir = os.path.abspath(os.path.dirname(__file__))
 PRIVATE_KEY_FILE = os.path.join(basedir, '..', 'issuer_priv.pem')
 PUBLIC_KEY_FILE = os.path.join(basedir, '..', 'issuer_pub.pem')
 ISSUER_ID = "ISSUER01"
 
-# This part of the code now checks if the DB connection was successful
 try:
     with open(PRIVATE_KEY_FILE, "rb") as f:
         issuer_priv = serialization.load_pem_private_key(f.read(), password=None)
@@ -58,14 +53,16 @@ try:
         issuer_pub_pem = f.read()
 except FileNotFoundError as e:
     print(f"FATAL_ERROR: Could not find key files: {e}")
-    # Set keys to None so the app can still start, but endpoints will fail gracefully
     issuer_priv = None
     issuer_pub_pem = None
 
 
 @app.route("/api/fetch_user", methods=["POST"])
 def fetch_user():
-    if not db:
+    # --- START OF FIX ---
+    # The error log told us to use 'is not None' instead of 'if not db'.
+    if db is None:
+    # --- END OF FIX ---
         return jsonify({"error": "Database connection failed on the server. Check logs."}), 500
     
     req = request.json or {}
@@ -88,8 +85,6 @@ def fetch_user():
         print(f"ERROR in fetch_user: {e}")
         return jsonify({"error": "An error occurred while fetching user data."}), 500
 
-# The rest of the file remains the same...
-
 def sign_message(priv_key, message_bytes):
     if not priv_key: return None
     return priv_key.sign(message_bytes, ec.ECDSA(hashes.SHA256()))
@@ -100,7 +95,7 @@ def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
 
 @app.route("/api/issue_credential", methods=["POST"])
 def issue_credential():
-    if not issuer_priv or not issuer_pub_pem:
+    if issuer_priv is None or issuer_pub_pem is None:
         return jsonify({"error": "Server is missing key files. Check logs."}), 500
 
     req = request.json or {}
