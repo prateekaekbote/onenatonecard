@@ -1,0 +1,14 @@
+{
+    "builds": [
+      {
+        "src": "api/issuer_server.py",
+        "use": "@vercel/python"
+      }
+    ],
+    "routes": [
+      {
+        "src": "/issue_credential",
+        "dest": "api/issuer_server.py"
+      }
+    ]
+  }
