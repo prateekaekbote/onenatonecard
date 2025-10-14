@@ -8,7 +8,6 @@ import os, base64, json
 
 app = Flask(__name__)
 
-# --- START OF CHANGES ---
 # Get the absolute path of the directory containing this script
 basedir = os.path.abspath(os.path.dirname(__file__))
 
@@ -16,7 +15,6 @@ basedir = os.path.abspath(os.path.dirname(__file__))
 # The script is in /api, so we go one level up ('..')
 PRIVATE_KEY_FILE = os.path.join(basedir, '..', 'issuer_priv.pem')
 PUBLIC_KEY_FILE = os.path.join(basedir, '..', 'issuer_pub.pem')
-# --- END OF CHANGES ---
 
 ISSUER_ID = "ISSUER01"
 
@@ -41,7 +39,7 @@ def derive_key_from_pin(pin: str, salt: bytes, iterations=200_000):
     )
     return kdf.derive(pin.encode("utf-8"))
 
-@app.route("/issue_credential", methods=["POST"])
+@app.route("/api/issue_credential", methods=["POST"])
 def issue_credential():
     """
     Expected JSON:

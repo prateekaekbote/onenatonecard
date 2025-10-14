@@ -86,7 +86,7 @@
       expiry: document.getElementById("expiry").value || undefined
     };
     try {
-      const res = await fetch("/issue_credential", {
+      const res = await fetch("/api/issue_credential", {
         method: "POST",
         headers: {"Content-Type":"application/json"},
         body: JSON.stringify(payload)

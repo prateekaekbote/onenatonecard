@@ -1,14 +1,23 @@
 {
-    "builds": [
-      {
-        "src": "api/issuer_server.py",
-        "use": "@vercel/python"
-      }
-    ],
-    "routes": [
-      {
-        "src": "/issue_credential",
-        "dest": "api/issuer_server.py"
-      }
-    ]
-  }
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/issuer_server.py",
+      "use": "@vercel/python"
+    },
+    {
+      "src": "index.html",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/(.*)",
+      "dest": "api/issuer_server.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "index.html"
+    }
+  ]
+}
