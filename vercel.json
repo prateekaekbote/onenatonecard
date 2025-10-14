@@ -31,12 +31,12 @@
       "dest": "index.html"
     }
   ],
-  "headers": [
-    {
-      "source": "/styles.css",
-      "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
-      ]
-    }
-  ]
+  // "headers": [
+  //   {
+  //     "source": "/styles.css",
+  //     "headers": [
+  //       { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+  //     ]
+  //   }
+  // ]
 }
