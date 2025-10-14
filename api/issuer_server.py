@@ -1,4 +1,4 @@
-# issuer_server.py
+# api/issuer_server.py
 from flask import Flask, request, jsonify
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -7,6 +7,7 @@ from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 import os, base64, json
 
 app = Flask(__name__)
+
 # --- START OF CHANGES ---
 # Get the absolute path of the directory containing this script
 basedir = os.path.abspath(os.path.dirname(__file__))
@@ -18,24 +19,9 @@ PUBLIC_KEY_FILE = os.path.join(basedir, '..', 'issuer_pub.pem')
 # --- END OF CHANGES ---
 
 ISSUER_ID = "ISSUER01"
-PRIVATE_KEY_FILE = "issuer_priv.pem"
-PUBLIC_KEY_FILE = "issuer_pub.pem"
 
-# generate keys if not present (demo only)
-if not os.path.exists(PRIVATE_KEY_FILE):
-    priv = ec.generate_private_key(ec.SECP256R1())
-    with open(PRIVATE_KEY_FILE, "wb") as f:
-        f.write(priv.private_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PrivateFormat.PKCS8,
-            encryption_algorithm=serialization.NoEncryption()
-        ))
-    pub = priv.public_key()
-    with open(PUBLIC_KEY_FILE, "wb") as f:
-        f.write(pub.public_bytes(
-            encoding=serialization.Encoding.PEM,
-            format=serialization.PublicFormat.SubjectPublicKeyInfo
-        ))
+# NOTE: The key generation part is removed for clarity,
+# as the keys should already exist in your project.
 
 with open(PRIVATE_KEY_FILE, "rb") as f:
     issuer_priv = serialization.load_pem_private_key(f.read(), password=None)
