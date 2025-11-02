@@ -218,33 +218,59 @@
     if(!lastTagText) return alert("No tag content available. Read a tag first.");
     const pin = document.getElementById("verifyPin").value;
     if(!pin) return alert("Enter PIN used at issuance.");
+    
     let blob;
     try {
       blob = JSON.parse(lastTagText);
     } catch(e){ alert("Tag JSON parse error: " + e); return; }
+
+    let plainText;
+    let plain; // Keep the raw bytes for verification
+
+    // --- 1. Decryption ---
     try {
       const salt = base64ToArray(blob.salt);
       const nonce = base64ToArray(blob.nonce);
       const ct = base64ToArray(blob.ct);
-      const sigDer = base64ToArray(blob.sig);
       const keyBytes = await derivePBKDF2Key(pin, salt, 200000, 256);
-      const plain = await aesGcmDecrypt(keyBytes, nonce, ct);
-      const plainText = new TextDecoder().decode(plain);
-      let issuerPem = lastIssuerPubPem;
-      if(!issuerPem){
-        issuerPem = prompt("Issuer public key missing. Paste issuer public key PEM here (from server response):");
-        if(!issuerPem){ alert("Issuer public key required for verification."); return; }
-      }
-      const rawSig = derToRaw(sigDer, 32);
-      const ok = await verifyEcdsaSignature(issuerPem, plain, rawSig);
-      if(!ok) {
-        credOut.textContent = "Signature INVALID";
-      } else {
-        credOut.textContent = plainText;
-      }
+      plain = await aesGcmDecrypt(keyBytes, nonce, ct);
+      plainText = new TextDecoder().decode(plain);
+
+      // MODIFICATION: Show decrypted content immediately
+      credOut.textContent = plainText; 
+ 
     } catch (e) {
       console.error(e);
-      alert("Decrypt/verify failed: " + (e.message || e));
+      credOut.textContent = "--- DECRYPTION FAILED ---";
+      alert("Decrypt failed: " + (e.message || e));
+      return; // Stop if we can't even decrypt
+    }
+
+    // --- 2. Verification (Attempt) ---
+    try {
+      const sigDer = base64ToArray(blob.sig);
+      let issuerPem = lastIssuerPubPem;
+
+      // MODIFICATION: Don't prompt. If key is missing, just add a warning and stop.
+      if(!issuerPem){
+        credOut.textContent += "\n\n--- WARNING: Signature not verified (Issuer public key is missing from this session.) ---";
+        return; 
+      }
+
+      const rawSig = derToRaw(sigDer, 32);
+      const ok = await verifyEcdsaSignature(issuerPem, plain, rawSig);
+
+      // MODIFICATION: Append verification status instead of replacing content
+      if(ok) {
+        credOut.textContent += "\n\n--- SIGNATURE VALID ---";
+      } else {
+        credOut.textContent += "\n\n--- WARNING: SIGNATURE INVALID ---";
+      }
+
+    } catch (e) {
+      console.error(e);
+      // MODIFICATION: Append a warning if verification step failed
+      credOut.textContent += `\n\n--- WARNING: Signature verification failed (${e.message || e}) ---`;
     }
   });
 
