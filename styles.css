@@ -61,3 +61,15 @@ input[readonly] { background: #f9fafb }
   transform: translateY(1px);
   box-shadow: 0 2px 8px rgba(0,0,0,.3);
 }
+
+.warning-box {
+  display: none; /* Hidden by default */
+  padding: 12px;
+  border-radius: 10px;
+  background: #fffbe6;
+  border: 1px solid #ffe58f;
+  color: #8a6d00;
+  font-weight: 600;
+  margin-bottom: 12px;
+  line-height: 1.5;
+}

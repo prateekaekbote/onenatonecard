@@ -51,7 +51,10 @@
     <p class="hint">Press Read tag, then touch the tag to the phone. After the raw blob appears, enter PIN and click Decrypt & Verify.</p>
     <p><strong>Tag raw:</strong></p>
     <pre id="tagRaw">--</pre>
-    <p><strong>Decrypted credential (if successful):</strong></p>
+    
+    <div id="verifyWarning" class="warning-box"></div>
+    
+    <p><strong>Decrypted credential:</strong></p>
     <pre id="credOut">--</pre>
   </div>
 
@@ -61,6 +64,9 @@
   const serverResp = document.getElementById("serverResp");
   const tagRaw = document.getElementById("tagRaw");
   const credOut = document.getElementById("credOut");
+  
+  // MODIFICATION: Added warning box element
+  const verifyWarning = document.getElementById("verifyWarning");
 
   // Get all input elements
   const elements = {
@@ -224,6 +230,11 @@
       blob = JSON.parse(lastTagText);
     } catch(e){ alert("Tag JSON parse error: " + e); return; }
 
+    // MODIFICATION: Reset UI elements
+    verifyWarning.style.display = "none";
+    verifyWarning.innerHTML = "";
+    credOut.textContent = "--";
+
     let plainText;
     let plain; // Keep the raw bytes for verification
 
@@ -236,13 +247,14 @@
       plain = await aesGcmDecrypt(keyBytes, nonce, ct);
       plainText = new TextDecoder().decode(plain);
 
-      // MODIFICATION: Show decrypted content immediately
+      // Show decrypted content
       credOut.textContent = plainText; 
  
     } catch (e) {
       console.error(e);
-      credOut.textContent = "--- DECRYPTION FAILED ---";
-      alert("Decrypt failed: " + (e.message || e));
+      // MODIFICATION: Show decryption error in the warning box
+      verifyWarning.innerHTML = "⚠️ <strong>Decryption Failed:</strong> " + (e.message || e);
+      verifyWarning.style.display = "block";
       return; // Stop if we can't even decrypt
     }
 
@@ -251,26 +263,28 @@
       const sigDer = base64ToArray(blob.sig);
       let issuerPem = lastIssuerPubPem;
 
-      // MODIFICATION: Don't prompt. If key is missing, just add a warning and stop.
       if(!issuerPem){
-        credOut.textContent += "\n\n--- WARNING: Signature not verified (Issuer public key is missing from this session.) ---";
+        // MODIFICATION: Show "missing key" warning in the box
+        verifyWarning.innerHTML = "⚠️ <strong>Verification Warning:</strong> Signature not verified (Issuer public key is missing from this session.)";
+        verifyWarning.style.display = "block";
         return; 
       }
 
       const rawSig = derToRaw(sigDer, 32);
       const ok = await verifyEcdsaSignature(issuerPem, plain, rawSig);
 
-      // MODIFICATION: Append verification status instead of replacing content
-      if(ok) {
-        credOut.textContent += "\n\n--- SIGNATURE VALID ---";
-      } else {
-        credOut.textContent += "\n\n--- WARNING: SIGNATURE INVALID ---";
+      if(!ok) {
+        // MODIFICATION: Show "invalid signature" warning in the box
+        verifyWarning.innerHTML = "⚠️ <strong>Verification Failed:</strong> The signature is INVALID. The data may be tampered with or from an untrusted source.";
+        verifyWarning.style.display = "block";
       }
+      // If OK, the warning box remains hidden, which is the "success" state.
 
     } catch (e) {
       console.error(e);
-      // MODIFICATION: Append a warning if verification step failed
-      credOut.textContent += `\n\n--- WARNING: Signature verification failed (${e.message || e}) ---`;
+      // MODIFICATION: Show verification error in the box
+      verifyWarning.innerHTML = "⚠️ <strong>Verification Error:</strong> " + (e.message || e);
+      verifyWarning.style.display = "block";
     }
   });
 
